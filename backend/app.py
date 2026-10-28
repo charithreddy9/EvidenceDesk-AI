@@ -6,6 +6,8 @@ from io import BytesIO
 import os
 import secrets
 import threading
+import time
+from collections import deque
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -71,6 +73,9 @@ def create_app(documents=None, db_path=None, provider=None, encoder=None) -> Fas
     store = DocumentStore(db_path or os.getenv("DATA_DB_PATH", "data/evidencedesk.sqlite3"), DEMO_DOCUMENTS if documents is None else documents)
     index = EvidenceIndex(store.list(), provider=selected, encoder=encoder)
     guard = threading.RLock()
+    llm_enabled = os.getenv('ENABLE_PAID_LLM', 'false').lower() == 'true'
+    llm_quota = deque()
+    llm_guard = threading.Lock()
 
     def require_read(authorization: str | None = Header(default=None)):
         if admin_token and not secrets.compare_digest(authorization or "", "Bearer " + admin_token):
@@ -90,7 +95,7 @@ def create_app(documents=None, db_path=None, provider=None, encoder=None) -> Fas
     @app.get("/api/config")
     def config(_: bool = Depends(require_read)):
         return {"retriever":selected,"semantic_enabled":selected != "tfidf",
-                "llm_available":bool(os.getenv("OPENAI_API_KEY")),
+                "llm_available":bool(llm_enabled and admin_token and os.getenv("OPENAI_API_KEY")),
                 "auth_required":bool(admin_token),"uploads_enabled":bool(admin_token or allow_public_upload),
                 "file_types":[".txt",".md",".pdf"],"max_file_bytes":MAX_FILE_BYTES}
 
@@ -132,8 +137,19 @@ def create_app(documents=None, db_path=None, provider=None, encoder=None) -> Fas
                     "citations":[],"abstained":True,"mode":"abstained","retriever":selected}
         citations = [{"reference":f"[{i+1}]",**p} for i,p in enumerate(passages)]
         if body.generate:
+            if not llm_enabled:
+                raise HTTPException(403, "Paid AI calls are disabled by deployment policy.")
+            if not admin_token:
+                raise HTTPException(403, "Paid AI requires authenticated access.")
             if not os.getenv("OPENAI_API_KEY"):
-                raise HTTPException(503, "OPENAI_API_KEY is required for LLM synthesis; turn it off for extractive mode.")
+                raise HTTPException(503, "OPENAI_API_KEY is not configured.")
+            with llm_guard:
+                now = time.monotonic()
+                while llm_quota and llm_quota[0] < now - 3600:
+                    llm_quota.popleft()
+                if len(llm_quota) >= 10:
+                    raise HTTPException(429, "Hourly AI budget limit reached.")
+                llm_quota.append(now)
             try:
                 answer = generate_grounded_answer(body.question,citations)
             except Exception as exc:
