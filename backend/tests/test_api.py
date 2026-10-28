@@ -37,7 +37,7 @@ def test_writes_disabled_without_admin_token(client):
 def test_requires_llm_key(client, monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY",raising=False)
     r=client.post("/api/ask",json={"question":"What is the meal allowance?","generate":True})
-    assert r.status_code == 503
+    assert r.status_code == 403
 
 def test_auth_upload_delete_persistence(tmp_path, monkeypatch):
     monkeypatch.setenv("ADMIN_TOKEN","testing-secret")
@@ -76,3 +76,14 @@ def test_config_describes_semantic_mode(tmp_path,monkeypatch):
     app=create_app(db_path=str(tmp_path/"sem.sqlite"),provider="sentence-transformers",encoder=FakeEncoder())
     result=TestClient(app).get("/api/config")
     assert result.status_code==200 and result.json()["semantic_enabled"] is True
+
+
+def test_paid_llm_remains_off_even_with_api_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key-never-used")
+    monkeypatch.setenv("ADMIN_TOKEN", "test-secret")
+    monkeypatch.delenv("ENABLE_PAID_LLM", raising=False)
+    client = TestClient(create_app(db_path=str(tmp_path / "paid.sqlite3")))
+    r = client.post("/api/ask", headers={"Authorization": "Bearer test-secret"},
+                    json={"question": "What is the meal allowance?", "generate": True})
+    assert r.status_code == 403
+    assert client.get("/api/config", headers={"Authorization": "Bearer test-secret"}).json()["llm_available"] is False
