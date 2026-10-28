@@ -25,3 +25,19 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+
+  semantic-model-smoke:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install ONNX semantic encoder
+        run: python -m pip install -r backend/requirements-fastembed.txt -r backend/requirements-dev.txt
+      - name: Run real local embedding integration test
+        env:
+          RUN_REAL_EMBEDDING_TEST: "true"
+        run: python -m pytest backend/tests/test_semantic.py -q
