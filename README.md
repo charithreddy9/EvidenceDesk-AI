@@ -1,10 +1,14 @@
 # EvidenceDesk — Full-Stack AI Document Intelligence
 
+### [🌐 Open Live Demo](https://evidencedesk-ai.onrender.com) · [View API health](https://evidencedesk-ai.onrender.com/api/health)
+
+**Deployment:** Render dashboard reports **Live** (free-tier single-service deployment). Public endpoint behavior should be manually smoke-tested before calling the demo fully verified.
+
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/charithreddy9/EvidenceDesk-AI)
 
 **[Deployment instructions](DEPLOY.md)** — one Render service builds and serves both the React frontend and FastAPI backend.
 
-**Status: developing portfolio prototype · NOT yet publicly deployed · NOT production-secure**
+**Status: public hosted demo · developing portfolio prototype · NOT production-secure**
 
 Document-question answering with **FastAPI + React**, SQLite-backed source records, PDF/TXT/Markdown ingestion, and transparent retrieval. Three *explicitly configured* retrieval backends:
 
@@ -36,7 +40,7 @@ Sources are stored persistently. The in-process vector index is rebuilt on start
 
 ## Quick start: Docker (recommended)
 
-From `projects/evidencedesk`:
+From the repository root:
 
 ```bash
 cp .env.example .env
