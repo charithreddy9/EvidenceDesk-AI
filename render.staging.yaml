@@ -1,0 +1,36 @@
+# Isolated staging Blueprint: do not add to production render.yaml.
+# Create a NEW Render Blueprint from branch staging-fastembed,
+# selecting Blueprint Path: render.staging.yaml.
+services:
+  - type: web
+    name: evidencedesk-ai-staging-bge
+    runtime: docker
+    plan: free
+    branch: staging-fastembed
+    dockerfilePath: ./Dockerfile.staging
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: RETRIEVAL_BACKEND
+        value: fastembed
+      - key: FASTEMBED_MODEL
+        value: BAAI/bge-small-en-v1.5
+      - key: FASTEMBED_CACHE_DIR
+        value: /app/model-cache
+      - key: FASTEMBED_THREADS
+        value: "1"
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
+      - key: ENABLE_PAID_LLM
+        value: "false"
+      - key: ENABLE_PAID_EMBEDDINGS
+        value: "false"
+      - key: ALLOW_PUBLIC_UPLOAD
+        value: "false"
+      - key: ENABLE_API_DOCS
+        value: "false"
+      - key: DATA_DB_PATH
+        value: /tmp/evidencedesk-staging.sqlite3

@@ -49,7 +49,11 @@ class FastEmbedEncoder:
     def __init__(self, model_name: str | None = None):
         from fastembed import TextEmbedding
         self.model_name = model_name or os.getenv("FASTEMBED_MODEL", "BAAI/bge-small-en-v1.5")
-        self.model = TextEmbedding(model_name=self.model_name)
+        self.model = TextEmbedding(
+            model_name=self.model_name,
+            cache_dir=os.getenv("FASTEMBED_CACHE_DIR") or None,
+            threads=max(1, min(int(os.getenv("FASTEMBED_THREADS", "1")), 4)),
+        )
 
     def encode(self, texts: list[str]) -> np.ndarray:
         return np.asarray(list(self.model.embed(texts)), dtype=np.float32)

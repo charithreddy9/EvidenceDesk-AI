@@ -1,0 +1,37 @@
+# Separate staging image: local BGE embeddings, no paid provider credentials.
+FROM node:22-alpine AS ui
+WORKDIR /ui
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+
+FROM python:3.11-slim
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    HOME=/home/staging \
+    FASTEMBED_CACHE_DIR=/app/model-cache \
+    FASTEMBED_THREADS=1 \
+    OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    TOKENIZERS_PARALLELISM=false \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    DATA_DB_PATH=/tmp/evidencedesk-staging.sqlite3 \
+    ENABLE_API_DOCS=false
+WORKDIR /app
+COPY backend/requirements*.txt /app/backend/
+RUN pip install --no-cache-dir -r backend/requirements-fastembed.txt
+COPY backend/ /app/backend/
+COPY --from=ui /ui/dist/ /app/public/
+# Prefetch the real local model during image build, not during a cold start.
+RUN mkdir -p /app/model-cache \
+    && python -c "from backend.retrieval import FastEmbedEncoder; import numpy as np; v=FastEmbedEncoder().encode(['staging model preload']); assert v.shape == (1, 384), v.shape" \
+    && useradd --uid 10001 --create-home staging \
+    && chown -R staging:staging /app/model-cache /home/staging
+USER staging
+EXPOSE 10000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10000/api/health', timeout=8)"
+CMD ["sh", "-c", "exec uvicorn backend.web:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1 --proxy-headers"]

@@ -1,0 +1,39 @@
+name: FastEmbed Staging Memory Gate
+on:
+  push:
+    branches: [staging-fastembed]
+  workflow_dispatch:
+jobs:
+  real-model-512mb-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build BGE-staging image with offline model preload
+        run: docker build -f Dockerfile.staging -t evidencedesk-bge-staging:ci .
+      - name: Start container with 512 MiB RAM cap
+        run: |
+          docker run -d --name evidence-bge-512 \
+            --memory=512m --memory-swap=512m --cpus=0.5 \
+            -p 127.0.0.1:18080:10000 \
+            -e PORT=10000 -e RETRIEVAL_BACKEND=fastembed \
+            -e ENABLE_PAID_LLM=false -e ENABLE_PAID_EMBEDDINGS=false \
+            -e ALLOW_PUBLIC_UPLOAD=false -e DATA_DB_PATH=/tmp/staging-ci.sqlite3 \
+            evidencedesk-bge-staging:ci
+      - name: Verify real semantic retrieval and disabled paid features
+        run: python scripts/staging_probe.py http://127.0.0.1:18080
+      - name: Measure container memory / OOM
+        if: always()
+        run: |
+          echo "### Container resource snapshot" >> "$GITHUB_STEP_SUMMARY"
+          docker stats --no-stream evidence-bge-512 || true
+          docker stats --no-stream evidence-bge-512 >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          docker inspect -f 'OOM killed: {{.State.OOMKilled}} | exit code: {{.State.ExitCode}}' evidence-bge-512 || true
+          docker logs --tail 60 evidence-bge-512 || true
+          if [ "$(docker inspect -f '{{.State.OOMKilled}}' evidence-bge-512)" = "true" ]; then
+            echo "OOM killed under 512 MiB memory cap" >&2
+            exit 1
+          fi
+      - name: Remove staging container
+        if: always()
+        run: docker rm -f evidence-bge-512 || true
