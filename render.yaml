@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: evidencedesk-ai
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: RETRIEVAL_BACKEND
+        value: tfidf
+      - key: ALLOW_PUBLIC_UPLOAD
+        value: "false"
+      - key: ENABLE_API_DOCS
+        value: "false"
+      - key: DATA_DB_PATH
+        value: /tmp/evidencedesk.sqlite3
