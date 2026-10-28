@@ -63,6 +63,8 @@ class FastEmbedEncoder:
 class OpenAIEncoder:
     def __init__(self, model_name: str | None = None):
         from openai import OpenAI
+        if os.getenv("ENABLE_PAID_EMBEDDINGS", "false").lower() != "true":
+            raise ValueError("Paid embeddings disabled: explicitly set ENABLE_PAID_EMBEDDINGS=true after approving costs")
         if not os.getenv("OPENAI_API_KEY"):
             raise ValueError("OPENAI_API_KEY is required for openai embeddings")
         self.client = OpenAI(timeout=30)
