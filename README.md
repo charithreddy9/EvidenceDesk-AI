@@ -10,13 +10,14 @@
 
 **Status: public hosted demo · developing portfolio prototype · NOT production-secure**
 
-Document-question answering with **FastAPI + React**, SQLite-backed source records, PDF/TXT/Markdown ingestion, and transparent retrieval. Three *explicitly configured* retrieval backends:
+Document-question answering with **FastAPI + React**, SQLite-backed source records, PDF/TXT/Markdown ingestion, and transparent retrieval. Four *explicitly configured* retrieval backends:
 
 - `tfidf`: fully offline lexical retrieval; default, works without embedding model or API keys.
+- `fastembed`: **real local ONNX semantic embeddings** using BGE-small-en-v1.5. Install `backend/requirements-fastembed.txt` and set `RETRIEVAL_BACKEND=fastembed`. The public Render deployment does **not** install or enable this by default. Initial model download and memory requirements must be verified separately.
 - `sentence-transformers`: **real local semantic embeddings** (default all-MiniLM-L6-v2). Requires `backend/requirements-semantic.txt` and downloading model weights during initial setup.
 - `openai`: **real hosted semantic embeddings** via `text-embedding-3-small`; requires paid `OPENAI_API_KEY`.
 
-Optional **OpenAI LLM** synthesis is prompted to cite retrieved passages. Citation numbers are validated; factual entailment is **not** independently verified. Uncited answers and unknown citation markers cause abstention.
+Optional **OpenAI LLM** synthesis is **disabled by default even when an API key is present**. It requires explicit `ENABLE_PAID_LLM=true`, a server-side `OPENAI_API_KEY`, and a configured `ADMIN_TOKEN`; an in-process limit of 10 generation requests per hour applies. Enable it only after approving costs and deployment security. When enabled it is prompted to provide concise source-cited answers. Citation numbers and response size are validated; factual entailment is **not** independently verified. Uncited answers and unknown citation markers cause abstention.
 
 ## Architecture
 
@@ -102,7 +103,7 @@ python -m backend.evaluate
 cd frontend && npm run build
 ```
 
-CI runs offline TF-IDF tests, including a deterministic fake encoder test for the semantic retrieval integration. Real external embedding model loading and hosted API calls are **not covered in CI** and must be evaluated separately.
+CI runs offline TF-IDF tests, including a deterministic fake encoder test for the semantic retrieval integration. Real embedding model loading is available as an explicit **manual GitHub Actions workflow_dispatch** smoke job (downloads BGE ONNX weights). Standard push CI runs offline semantic-vector tests without downloading weights. Hosted API calls are never performed in CI.
 
 ## Limitations and roadmap
 
@@ -113,5 +114,13 @@ CI runs offline TF-IDF tests, including a deterministic fake encoder test for th
 - SQLite and in-process vector index are single-instance; process restarts rebuild the model index.
 - Shared admin token, no per-user authorization, rate limits, virus scanning, document redaction, audit logs, or distributed storage. **Do not ingest sensitive or regulated documents in an untrusted deployment.**
 - Planned next: persistent vector store (pgvector), reranking, evaluated semantic retrieval on benchmark data, OAuth/OIDC login, durable ingest jobs, audit trails, and public deployment with hardened ingress.
+
+## Safe semantic RAG evaluation
+
+- **Live Render:** stays on `RETRIEVAL_BACKEND=tfidf`, `ENABLE_PAID_LLM=false`, and `ALLOW_PUBLIC_UPLOAD=false`. No paid calls or anonymous document writes.
+- **Offline dense semantics:** install `pip install -r backend/requirements-fastembed.txt`, set `RETRIEVAL_BACKEND=fastembed`, then run `python -m backend.evaluate`. First run downloads the local ONNX BGE model; the build and host need sufficient disk/RAM.
+- **Unit CI:** fake-vector semantic ranking and retrieval smoke tests; **manual CI:** real model download/inference. Current five-question toy hit@k is a regression check, **not a statistical retrieval benchmark**.
+- **Paid service safeguard:** `ENABLE_PAID_LLM=true` + `ADMIN_TOKEN` + `OPENAI_API_KEY` are all required before hosted generation; the 10/hour cap is per process, not a production-wide accounting guarantee. Never switch it on publicly without an authenticated trusted-user gateway and budget monitoring.
+- **Grounding limitation:** verifying allowed citation numbers does not prove a generated factual claim is supported; human review and labeled faithfulness tests remain important.
 
 **Repository:** https://github.com/charithreddy9/EvidenceDesk-AI. The earlier portfolio-workspace copy remains available for reference.
