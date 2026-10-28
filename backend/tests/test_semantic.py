@@ -28,3 +28,11 @@ def test_real_model_optional():
     vectors=enc.encode(["The daily meal allowance is sixty-five dollars.", "Keep your secrets safe."])
     assert vectors.shape[0] == 2 and vectors.shape[1] > 100
     assert np.isfinite(vectors).all()
+
+def test_paid_embedding_requires_explicit_enable(monkeypatch):
+    import pytest
+    from backend.retrieval import OpenAIEncoder
+    monkeypatch.setenv("OPENAI_API_KEY", "dummy-not-used")
+    monkeypatch.delenv("ENABLE_PAID_EMBEDDINGS", raising=False)
+    with pytest.raises(ValueError, match="Paid embeddings disabled"):
+        OpenAIEncoder()
