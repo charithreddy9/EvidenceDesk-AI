@@ -15,7 +15,7 @@ Document-question answering with **FastAPI + React**, SQLite-backed source recor
 - `tfidf`: fully offline lexical retrieval; default, works without embedding model or API keys.
 - `fastembed`: **real local ONNX semantic embeddings** using BGE-small-en-v1.5. Install `backend/requirements-fastembed.txt` and set `RETRIEVAL_BACKEND=fastembed`. The public Render deployment does **not** install or enable this by default. Initial model download and memory requirements must be verified separately.
 - `sentence-transformers`: **real local semantic embeddings** (default all-MiniLM-L6-v2). Requires `backend/requirements-semantic.txt` and downloading model weights during initial setup.
-- `openai`: **real hosted semantic embeddings** via `text-embedding-3-small`; requires paid `OPENAI_API_KEY`.
+- `openai`: **real hosted semantic embeddings** via `text-embedding-3-small`; requires paid `OPENAI_API_KEY` **and** explicit `ENABLE_PAID_EMBEDDINGS=true`.
 
 Optional **OpenAI LLM** synthesis is **disabled by default even when an API key is present**. It requires explicit `ENABLE_PAID_LLM=true`, a server-side `OPENAI_API_KEY`, and a configured `ADMIN_TOKEN`; an in-process limit of 10 generation requests per hour applies. Enable it only after approving costs and deployment security. When enabled it is prompted to provide concise source-cited answers. Citation numbers and response size are validated; factual entailment is **not** independently verified. Uncited answers and unknown citation markers cause abstention.
 
@@ -53,7 +53,7 @@ Browse **http://localhost:8080**. Compose intentionally binds to loopback only; 
 
 For local embeddings, change `RETRIEVAL_BACKEND=sentence-transformers` and `INSTALL_SEMANTIC=true` in `.env`, then rebuild. First model download requires internet and increases image size/startup latency.
 
-For OpenAI embeddings, use `RETRIEVAL_BACKEND=openai` and set `OPENAI_API_KEY`. LLM synthesis uses the same server-side key and can incur charges.
+For OpenAI embeddings, use `RETRIEVAL_BACKEND=openai`, set `OPENAI_API_KEY`, and explicitly opt in with `ENABLE_PAID_EMBEDDINGS=true` only after approving charges. LLM synthesis uses the same server-side key and can incur charges.
 
 ## Local development without Docker
 
