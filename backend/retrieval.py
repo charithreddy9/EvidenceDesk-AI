@@ -1,7 +1,8 @@
 """Evidence retrieval with explicit lexical, local-semantic, and remote-semantic modes.
 
-Use RETRIEVAL_BACKEND=tfidf (offline), sentence-transformers (local embeddings)
-or openai (hosted embeddings). No silent fallback between modes.
+Use RETRIEVAL_BACKEND=tfidf (offline lexical), fastembed (local ONNX dense vectors),
+sentence-transformers (local PyTorch), or openai (paid hosted vectors).
+Never silently switch backends or send document text to an external provider.
 """
 from __future__ import annotations
 
@@ -39,6 +40,26 @@ class SentenceTransformerEncoder:
     def encode(self, texts: list[str]) -> np.ndarray:
         return np.asarray(self.model.encode(texts, batch_size=32, show_progress_bar=False), dtype=np.float32)
 
+class FastEmbedEncoder:
+    """Real local ONNX dense embedding model; no remote inference/API cost.
+
+    The model is downloaded on first install/build. Pin its revision in production
+    and review the model license before commercial reuse.
+    """
+    def __init__(self, model_name: str | None = None):
+        from fastembed import TextEmbedding
+        self.model_name = model_name or os.getenv("FASTEMBED_MODEL", "BAAI/bge-small-en-v1.5")
+        self.model = TextEmbedding(model_name=self.model_name)
+
+    def encode(self, texts: list[str]) -> np.ndarray:
+        return np.asarray(list(self.model.embed(texts)), dtype=np.float32)
+
+    def encode_query(self, texts: list[str]) -> np.ndarray:
+        # BGE v1.5 was trained with a retrieval query instruction.
+        prepared = ["Represent this sentence for searching relevant passages: " + t for t in texts]
+        return self.encode(prepared)
+
+
 class OpenAIEncoder:
     def __init__(self, model_name: str | None = None):
         from openai import OpenAI
@@ -55,10 +76,11 @@ class EvidenceIndex:
     def __init__(self, documents=None, provider="tfidf", encoder=None):
         self.documents = list(DEMO_DOCUMENTS if documents is None else documents)
         self.provider = provider
-        if provider not in {"tfidf", "sentence-transformers", "openai"}:
-            raise ValueError("RETRIEVAL_BACKEND must be tfidf, sentence-transformers, or openai")
+        if provider not in {"tfidf", "fastembed", "sentence-transformers", "openai"}:
+            raise ValueError("RETRIEVAL_BACKEND must be tfidf, fastembed, sentence-transformers, or openai")
         self.encoder = encoder if encoder is not None else (
             SentenceTransformerEncoder() if provider == "sentence-transformers" else
+            FastEmbedEncoder() if provider == "fastembed" else
             OpenAIEncoder() if provider == "openai" else None
         )
         self._rebuild()
@@ -111,7 +133,8 @@ class EvidenceIndex:
         if self.provider == "tfidf":
             scores = cosine_similarity(self.vectorizer.transform([question]), self.matrix).ravel()
         else:
-            query = self._normalized(self.encoder.encode([question]))
+            encode_query = getattr(self.encoder, "encode_query", self.encoder.encode)
+            query = self._normalized(encode_query([question]))
             scores = (query @ self.matrix.T).ravel()
         order = sorted(range(len(scores)), key=lambda i: (-float(scores[i]), self.passages[i]["doc_id"], self.passages[i]["chunk"]))
         return [{**self.passages[i], "score": round(float(scores[i]), 4)}
