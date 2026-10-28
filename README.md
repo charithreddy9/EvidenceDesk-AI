@@ -1,5 +1,9 @@
 # EvidenceDesk — Full-Stack AI Document Intelligence
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/charithreddy9/EvidenceDesk-AI)
+
+**[Deployment instructions](DEPLOY.md)** — one Render service builds and serves both the React frontend and FastAPI backend.
+
 **Status: developing portfolio prototype · NOT yet publicly deployed · NOT production-secure**
 
 Document-question answering with **FastAPI + React**, SQLite-backed source records, PDF/TXT/Markdown ingestion, and transparent retrieval. Three *explicitly configured* retrieval backends:
