@@ -5,7 +5,10 @@ import sys
 def verify(report):
     current=report["summary"]
     held=report["holdout"]["verified_summary"]
+    cases={x["id"]:x for x in report["cases"]}
     thresholds={
+        "p04 booking answer is grounded": cases["p04"]["passed"],
+        "p05 credentials answer is grounded": cases["p05"]["passed"],
         "original recall": current["recall_at_3"] >= .8636,
         "original abstention": current["abstention_accuracy"] >= .875,
         "heldout recall": held["recall_at_3"] >= .625,
