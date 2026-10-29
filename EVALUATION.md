@@ -1,32 +1,43 @@
-# EvidenceDesk: reproducible model-quality dashboard
+# How I checked answer quality
 
-The staging branch has a read-only **Evaluation dashboard** in the React sidebar. Its data is generated during the staging Docker build with the real **BAAI/bge-small-en-v1.5 FastEmbed ONNX encoder**, then served from a static JSON snapshot at `GET /api/evaluation`. Visitors cannot launch model evaluations. Production `main` is unaffected.
+The first versions of EvidenceDesk showed why retrieval accuracy and answer accuracy are not the same thing. Semantic search was good at finding a related policy, but sometimes it returned the wrong sentence. When I made filtering stricter, the app started rejecting valid paraphrases.
 
-## Labeled dataset and metrics
+I made the evaluation dashboard to keep those trade-offs visible.
 
-The dataset in `backend/evaluation_report.py` includes 12 direct questions, 10 paraphrases and 8 deliberately unanswerable questions over four fictional policies. Every answerable question has an expected document and a verbatim answer fragment. Every unanswerable question has a null expected source.
+## The questions
 
-- **Hit@1**: fraction of answerable queries with the expected source ranked first **after evidence filtering**.
-- **Recall@3**: fraction of answerable queries with the expected source somewhere in the returned top three **after filtering**.
-- **MRR**: average reciprocal rank of the expected source, zero if none retained.
-- **Abstention accuracy**: fraction of unanswerable queries for which no evidence is returned.
-- **Answer-fragment support**: fraction of answerable queries where the selected top sentence comes from the expected document and contains the manually labeled text. This is not a factual-entailment metric.
-- **Latency**: single warm-process elapsed time around embedding, retrieval and filtering for each query, in milliseconds. Mean, p50 and p95 are displayed.
+The main test set has 30 manually written questions over four fictional policies: 12 direct questions, 10 paraphrases, and 8 questions that shouldn't have an answer. Each answerable question has an expected document and a short piece of text that should appear in the retrieved sentence.
 
-Case explorer filters by question type and pass/fail, and exposes predicted source, extracted answer, latency and expected answer text. A failed test case remains visible; nothing is hidden to make metrics look better.
+There is also a 14-question development set with different wording. It uses the same four policies, and I inspected those results while adjusting retrieval. It's useful for regression testing, but it is **not** a blind or independent benchmark.
 
-## Generate/reproduce
+## What the numbers mean
 
-With FastEmbed dependencies installed and a model cache available:
+- **Hit@1:** how often the expected document is ranked first among retained evidence.
+- **Recall@3:** how often it appears in the first three retained results.
+- **MRR:** average reciprocal rank of the expected document; missing results count as zero.
+- **Abstention accuracy:** how often the app correctly returns no evidence for an unanswerable question.
+- **Source-fragment support:** whether the top sentence comes from the expected document and contains the labeled text. This is a string check, not a human or model judgment about entailment.
+- **Latency:** time spent on local retrieval and filtering in a warm single-process evaluation run. It excludes network delay, cold starts, and concurrent requests.
 
-```sh
-RETRIEVAL_BACKEND=fastembed python -m backend.evaluate --report /tmp/evidence-evaluation.json
+The dashboard includes individual cases so a higher average score can't hide a broken question.
+
+## Reproduce it
+
+Install the FastEmbed and development dependencies first, then run:
+
+```bash
+RETRIEVAL_BACKEND=fastembed python -m backend.evaluate --report /tmp/evidencedesk-evaluation.json
+python -m backend.quality_gate /tmp/evidencedesk-evaluation.json
 ```
 
-Review `/tmp/evidence-evaluation.json`. Staging Docker creates the same report at `/app/reports/evaluation.json` during `docker build`. Report generation performs **no OpenAI calls**.
+The staging Docker build produces the same type of report in `/app/reports/evaluation.json`. The frontend reads it from `GET /api/evaluation`. Opening the page does **not** trigger a fresh model evaluation.
 
-## Limitations
+The quality gate checks a few regression thresholds on both development sets and specifically checks the previously troublesome booking and credential-storage paraphrases. That doesn't prove the rules will work for a different collection of documents.
 
-This tiny, hand-authored dataset is neither representative of live traffic nor independent of the corpus. Metrics are illustrative, not general-purpose QA accuracy. Similarity scores are cosine similarity, not probability of correctness. Answer-fragment matching is literal substring containment, not independent entailment validation. The report is a single offline run on the build machine—not live user latency, cold starts, model drift or long-term monitoring. Retraining, corpus edits or threshold changes require a fresh image build.
+## What I learned, and what's still missing
 
-**Safety:** The staging Blueprint still specifies `ENABLE_PAID_LLM=false`, `ENABLE_PAID_EMBEDDINGS=false`, `ALLOW_PUBLIC_UPLOAD=false`, and `autoDeployTrigger: "off"`. The code and report are only on `staging-fastembed` until explicitly promoted.
+More aggressive abstention can make a system look safe while silently losing valid answers. Adding TF-IDF alongside BGE helped recover useful candidates, but the remaining source check still uses practical heuristics. Similarity is not a confidence percentage, and retrieving a sentence doesn't independently prove an answer is faithful.
+
+The strongest next test would use unseen documents, question labels collected without looking at the results, and human review of whether each answer really follows from its citation.
+
+Staging keeps paid AI features off and uses fictional documents only. I wouldn't put confidential material into this public demo.
