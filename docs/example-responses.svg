@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650" role="img" aria-label="Illustrative EvidenceDesk response previews: a cited answer and an abstention">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b191b"/><stop offset="1" stop-color="#112c29"/></linearGradient>
+  </defs>
+  <rect width="1200" height="650" fill="#071313"/>
+  <rect x="26" y="22" width="1148" height="606" rx="20" fill="url(#bg)" stroke="#284b45" stroke-width="2"/>
+  <text x="65" y="82" font-size="30" font-weight="700" font-family="Arial, sans-serif" fill="#e3fff4">EvidenceDesk <tspan fill="#66e7bd">AI</tspan></text>
+  <text x="67" y="112" font-size="13" letter-spacing="2" font-family="Arial, sans-serif" fill="#91beb0">ILLUSTRATIVE PREVIEW — VERIFIED DEMO ANSWERS</text>
+  <rect x="62" y="146" width="1076" height="204" rx="14" fill="#142a28" stroke="#345c52"/>
+  <rect x="80" y="166" width="150" height="26" rx="13" fill="#1c4b3b"/>
+  <text x="92" y="184" font-size="12" font-weight="700" font-family="Arial, sans-serif" fill="#88f8c9">CITED ANSWER</text>
+  <text x="85" y="223" font-size="17" font-family="Arial, sans-serif" fill="#adc9c0">Q: Can plane tickets be booked outside the corporate tool?</text>
+  <text x="85" y="263" font-size="20" font-weight="600" font-family="Arial, sans-serif" fill="#ffffff">All travel must be booked through the company travel portal. [1]</text>
+  <text x="85" y="305" font-size="14" font-family="Arial, sans-serif" fill="#79d8b5">[1] Sample Travel &amp; Expenses Policy · 63.5% cosine similarity</text>
+  <rect x="62" y="374" width="1076" height="196" rx="14" fill="#142a28" stroke="#345c52"/>
+  <rect x="80" y="393" width="150" height="26" rx="13" fill="#3c3430"/>
+  <text x="97" y="410" font-size="12" font-weight="700" font-family="Arial, sans-serif" fill="#ffd39c">NO EVIDENCE</text>
+  <text x="85" y="449" font-size="17" font-family="Arial, sans-serif" fill="#adc9c0">Q: How many paid vacation days do employees get?</text>
+  <text x="85" y="488" font-size="20" font-weight="600" font-family="Arial, sans-serif" fill="#ffffff">I couldn't find enough supporting evidence in the indexed documents.</text>
+  <text x="85" y="534" font-size="14" font-family="Arial, sans-serif" fill="#c5a889">No source citations returned</text>
+  <text x="65" y="604" font-size="13" font-family="Arial, sans-serif" fill="#7daca0">This graphic recreates two confirmed responses. It is not a screenshot of the deployed UI.</text>
+</svg>

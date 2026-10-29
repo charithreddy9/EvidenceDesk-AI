@@ -1,72 +1,110 @@
-# EvidenceDesk — Full-Stack AI Document Intelligence
+# EvidenceDesk AI
 
-### [🌐 Open Live Demo](https://evidencedesk-ai.onrender.com) · [View API health](https://evidencedesk-ai.onrender.com/api/health)
+**A document-search app that shows its sources—and says when it doesn't know.**
 
-**Deployment:** Render dashboard reports **Live** (free-tier single-service deployment). Public endpoint behavior should be manually smoke-tested before calling the demo fully verified.
+[Try the semantic demo](https://evidencedesk-ai-staging-bge.onrender.com) · [See the evaluation dashboard](https://evidencedesk-ai-staging-bge.onrender.com) · [View the simpler TF-IDF version](https://evidencedesk-ai.onrender.com)
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/charithreddy9/EvidenceDesk-AI)
+[![Application tests](https://github.com/charithreddy9/EvidenceDesk-AI/actions/workflows/ci.yml/badge.svg?branch=staging-fastembed)](https://github.com/charithreddy9/EvidenceDesk-AI/actions/workflows/ci.yml?query=branch%3Astaging-fastembed)
+[![Real-model and memory test](https://github.com/charithreddy9/EvidenceDesk-AI/actions/workflows/staging-memory.yml/badge.svg?branch=staging-fastembed)](https://github.com/charithreddy9/EvidenceDesk-AI/actions/workflows/staging-memory.yml?query=branch%3Astaging-fastembed)
 
-**[Deployment instructions](DEPLOY.md)** — one Render service builds and serves both the React frontend and FastAPI backend.
+*React · TypeScript-free JavaScript · Vite · FastAPI · Python · SQLite · BGE-small / FastEmbed · scikit-learn · Docker · GitHub Actions · Render*
 
-**Status: public hosted demo · developing portfolio prototype · NOT production-secure**
+## Why I built it
 
-Document-question answering with **FastAPI + React**, SQLite-backed source records, PDF/TXT/Markdown ingestion, and transparent retrieval. Four *explicitly configured* retrieval backends:
+I wanted to explore a problem that comes up quickly with document-based AI: finding a passage that sounds related to a question is not the same as finding a passage that answers it.
 
-- `tfidf`: fully offline lexical retrieval; default, works without embedding model or API keys.
-- `fastembed`: **real local ONNX semantic embeddings** using BGE-small-en-v1.5. Install `backend/requirements-fastembed.txt` and set `RETRIEVAL_BACKEND=fastembed`. The public Render deployment does **not** install or enable this by default. Initial model download and memory requirements must be verified separately.
-- `sentence-transformers`: **real local semantic embeddings** (default all-MiniLM-L6-v2). Requires `backend/requirements-semantic.txt` and downloading model weights during initial setup.
-- `openai`: **real hosted semantic embeddings** via `text-embedding-3-small`; requires paid `OPENAI_API_KEY` **and** explicit `ENABLE_PAID_EMBEDDINGS=true`.
+EvidenceDesk started with straightforward keyword search. That was a useful baseline, but it struggled when someone asked a question in different words from the document. I added local sentence embeddings to handle paraphrases, then ran into the opposite problem: semantic search occasionally returned convincing-looking passages that had nothing to do with the actual answer.
 
-Optional **OpenAI LLM** synthesis is **disabled by default even when an API key is present**. It requires explicit `ENABLE_PAID_LLM=true`, a server-side `OPENAI_API_KEY`, and a configured `ADMIN_TOKEN`; an in-process limit of 10 generation requests per hour applies. Enable it only after approving costs and deployment security. When enabled it is prompted to provide concise source-cited answers. Citation numbers and response size are validated; factual entailment is **not** independently verified. Uncited answers and unknown citation markers cause abstention.
+The current staging version combines both approaches. It searches with BGE-small embeddings and TF-IDF, checks the candidate sentences for relevant evidence, and either returns the original sentence with a citation or says it couldn't find enough support. It **doesn't use a language model to write the answer**.
 
-## Architecture
+All four documents in the public demo are fictional policies. They're intentionally small so it's easy to inspect the result and notice when the retrieval goes wrong.
 
-```text
-Browser / React ─► Nginx (proxy /api) ─► FastAPI ─► SQLite documents
-                                              │
-                                   Page-aware text chunking
-                                              │
-                                   Explicitly selected retriever
-                        ┌─────────────────────┼──────────────────────┐
-                    TF-IDF                Local embeddings       OpenAI embeddings
-                        └─────────────────────┼──────────────────────┘
-                                     Ranked source passages
-                                              │
-                              Extractive answer OR optional LLM
-                                              │
-                                Validated reference markers [1]
+## See it in action
+
+![Illustrative previews of the two response types, based on verified demo results](docs/example-responses.svg)
+
+*Illustrative examples based on verified outputs—not direct screenshots of the live app. The interactive demo is linked above.*
+
+Try asking:
+
+> **Can plane tickets be booked outside the corporate tool?**
+
+The response quotes the travel policy:
+
+> All travel must be booked through the company travel portal. [1]
+
+The citation shows the policy title and exact sentence. You can also ask where live-system passwords should be stored. The answer points to the credentials rule in the security handbook.
+
+Then try something the documents don't cover:
+
+> **How many paid vacation days do employees get?**
+
+Rather than guess, the app returns:
+
+> I couldn't find enough supporting evidence in the indexed documents.
+
+That's the behavior I was most interested in getting right: a missing answer should look like a missing answer.
+
+**[Open the working semantic demo](https://evidencedesk-ai-staging-bge.onrender.com)**
+
+## How it works
+
+```mermaid
+flowchart LR
+    Q["Question in React"] --> API["FastAPI"]
+    API --> BGE["BGE-small semantic search"]
+    API --> TF["Local TF-IDF search"]
+    BGE --> F["Combine candidate sentences"]
+    TF --> F
+    F --> V{"Enough evidence?"}
+    V -->|Yes| S["Original sentence + citation"]
+    V -->|No| A["Abstain"]
 ```
 
-Sources are stored persistently. The in-process vector index is rebuilt on startup and after uploads or deletion; **embeddings are not yet persisted**. This is a single-instance demo, not a scalable vector database system.
+The backend stores document records in SQLite and builds an in-memory sentence index. BGE-small runs locally through ONNX; TF-IDF provides a second signal for terms that matter. A lightweight verifier examines the top candidate sentences before the API returns anything to the user.
 
-## Quick start: Docker (recommended)
+I chose verbatim sentences over generated summaries so the app wouldn't need a paid API, and so people could verify the answer against the source. The trade-off is that a single sentence sometimes can't fully answer a complicated question.
 
-From the repository root:
+The [architecture notes](https://github.com/charithreddy9/EvidenceDesk-AI/blob/staging-fastembed/ARCHITECTURE.md) explain the components, ranking trade-offs, and why the staging service is separate from production.
+
+## What testing changed
+
+I didn't get answer filtering right on the first try. An early semantic-only version found the meal allowance correctly but also surfaced unrelated policies. Tightening the filters improved abstention, but it rejected legitimate paraphrases, including questions about booking channels and credential storage.
+
+I added an evaluation page so those mistakes wouldn't be invisible. It shows the individual questions, the expected document, the retrieved sentence, and whether the case passed. Failures stay visible instead of being averaged away.
+
+The most recent *verified development run* gave:
+
+| Check | Result |
+| --- | ---: |
+| Original development set | **30 / 30** cases passed |
+| Unsupported questions in that set | **8 / 8** correctly rejected |
+| Separate development question set | **13 / 14** cases passed |
+| Unsupported questions in the second set | **6 / 6** correctly rejected |
+
+Those numbers need context. The original set has 30 hand-written questions over four fictional documents. The other 14 questions use different wording but **the same documents**, and I inspected them while improving the verifier. This is a useful regression test, **not** an independent benchmark or a claim of 100% accuracy in the real world.
+
+The dashboard also reports Recall@3, mean reciprocal rank (MRR), and warm retrieval latency. Similarity values are embedding scores, not probabilities that an answer is correct.
+
+Read the [evaluation notes](https://github.com/charithreddy9/EvidenceDesk-AI/blob/staging-fastembed/EVALUATION.md) to reproduce the report and see precisely what each metric means.
+
+## Run it locally
+
+The hybrid search code lives on `staging-fastembed`, not on this default branch. Check out that branch before trying the commands below:
 
 ```bash
-cp .env.example .env
-# Edit .env and replace ADMIN_TOKEN with a long random secret
-docker compose up --build
+git clone https://github.com/charithreddy9/EvidenceDesk-AI.git
+cd EvidenceDesk-AI
+git switch staging-fastembed
 ```
 
-Browse **http://localhost:8080**. Compose intentionally binds to loopback only; use a TLS-terminating reverse proxy and additional hardening for any public deployment. Paste the same `ADMIN_TOKEN` into the app's token field to access protected endpoints and upload documents. The token stays in React state (not local storage). Do **not** embed the token in the frontend bundle.
-
-For local embeddings, change `RETRIEVAL_BACKEND=sentence-transformers` and `INSTALL_SEMANTIC=true` in `.env`, then rebuild. First model download requires internet and increases image size/startup latency.
-
-For OpenAI embeddings, use `RETRIEVAL_BACKEND=openai`, set `OPENAI_API_KEY`, and explicitly opt in with `ENABLE_PAID_EMBEDDINGS=true` only after approving charges. LLM synthesis uses the same server-side key and can incur charges.
-
-## Local development without Docker
-
-Requires Python 3.11+ and Node.js 22+.
+You need Python 3.11+, Node.js 22+, and internet access the first time the BGE model downloads.
 
 ```bash
 python -m venv .venv
-# macOS/Linux: source .venv/bin/activate
-# Windows: .venv\Scripts\activate
-pip install -r backend/requirements-dev.txt
-# For local semantic inference, also install: pip install -r backend/requirements-semantic.txt
-# Optional: set ADMIN_TOKEN in your environment before launching
-uvicorn backend.app:app --reload --port 8000
+source .venv/bin/activate
+pip install -r backend/requirements-fastembed.txt
+RETRIEVAL_BACKEND=fastembed uvicorn backend.app:app --port 8000
 ```
 
 In a second terminal:
@@ -74,53 +112,37 @@ In a second terminal:
 ```bash
 cd frontend
 npm install
-# Direct local backend from Vite: create frontend/.env.local containing:
-# VITE_API_BASE_URL=http://localhost:8000
+# Put VITE_API_BASE_URL=http://localhost:8000 in frontend/.env.local
 npm run dev
 ```
 
-API reference in development: **http://localhost:8000/docs**.
+On Windows, activate the virtual environment with `.venv\Scripts\Activate.ps1` in PowerShell and set the backend environment variable using `$env:RETRIEVAL_BACKEND="fastembed"`.
 
-## API
-
-| Endpoint | Notes |
-| --- | --- |
-| `GET /api/health` | Unauthenticated health |
-| `GET /api/config` | Retriever and feature capability flags |
-| `GET /api/documents` | Document list; titles/IDs and chunk counts |
-| `POST /api/upload` | Ingest PDF, TXT, or MD, max 2 MiB; write protection applies |
-| `POST /api/documents` | JSON text ingestion |
-| `DELETE /api/documents/{id}` | Delete user-imported docs (seed documents protected) |
-| `POST /api/ask` | Top-k retrieval; optional `generate: true` LLM synthesis |
-
-`ADMIN_TOKEN` protects read/write endpoints via `Authorization: Bearer …`; **without a token, read-only sample mode is enabled by default**. In a public deployment, always set a strong token. This is basic single-tenant protection, not production identity or RBAC.
-
-## Quality checks
+To run the checks and create a fresh evaluation report:
 
 ```bash
+pip install -r backend/requirements-dev.txt
 python -m pytest backend/tests -q
-python -m backend.evaluate
-cd frontend && npm run build
+RETRIEVAL_BACKEND=fastembed python -m backend.evaluate --report /tmp/evidencedesk-evaluation.json
+python -m backend.quality_gate /tmp/evidencedesk-evaluation.json
 ```
 
-CI runs offline TF-IDF tests, including a deterministic fake encoder test for the semantic retrieval integration. Real embedding model loading is available as an explicit **manual GitHub Actions workflow_dispatch** smoke job (downloads BGE ONNX weights). Standard push CI runs offline semantic-vector tests without downloading weights. Hosted API calls are never performed in CI.
+CI also builds a staging Docker image, runs the actual BGE model, and checks that the service starts within a **512 MiB memory limit**. This only checks a small workload, not concurrency or production-scale load.
 
-## Limitations and roadmap
+## What I would improve next
 
-- Four **fictional sample policies** and a five-question toy retrieval evaluation. No claims of real-world benchmark accuracy.
-- PDF extraction only handles text-based PDFs, not scanned documents/OCR.
-- TF-IDF or embedding cosine score is **not a calibrated confidence score**. Retrieval thresholds are development heuristics, and semantic search can return semantically related but irrelevant chunks.
-- LLM citation marker validation does not guarantee factual accuracy; rigorous faithfulness evaluation and adversarial prompt-injection tests remain to be done.
-- SQLite and in-process vector index are single-instance; process restarts rebuild the model index.
-- Shared admin token, no per-user authorization, rate limits, virus scanning, document redaction, audit logs, or distributed storage. **Do not ingest sensitive or regulated documents in an untrusted deployment.**
-- Planned next: persistent vector store (pgvector), reranking, evaluated semantic retrieval on benchmark data, OAuth/OIDC login, durable ingest jobs, audit trails, and public deployment with hardened ingress.
+I'd test against a genuinely unseen collection of documents with someone else labeling the answers. I also want to check multi-sentence questions, improve the evidence verifier beyond word overlap, and test memory and latency under concurrent requests. Before using real organizational documents, the app would need stronger authentication, audit logging, persistent storage, and safer ingestion.
 
-## Safe semantic RAG evaluation
+This is a working **portfolio prototype**, not a secure multi-tenant document platform. Don't upload confidential or regulated information to the public demo.
 
-- **Live Render:** stays on `RETRIEVAL_BACKEND=tfidf`, `ENABLE_PAID_LLM=false`, and `ALLOW_PUBLIC_UPLOAD=false`. No paid calls or anonymous document writes.
-- **Offline dense semantics:** install `pip install -r backend/requirements-fastembed.txt`, set `RETRIEVAL_BACKEND=fastembed`, then run `python -m backend.evaluate`. First run downloads the local ONNX BGE model; the build and host need sufficient disk/RAM.
-- **Unit CI:** fake-vector semantic ranking and retrieval smoke tests; **manual CI:** real model download/inference. Current five-question toy hit@k is a regression check, **not a statistical retrieval benchmark**.
-- **Paid service safeguard:** `ENABLE_PAID_LLM=true` + `ADMIN_TOKEN` + `OPENAI_API_KEY` are all required before hosted generation; the 10/hour cap is per process, not a production-wide accounting guarantee. Never switch it on publicly without an authenticated trusted-user gateway and budget monitoring.
-- **Grounding limitation:** verifying allowed citation numbers does not prove a generated factual claim is supported; human review and labeled faithfulness tests remain important.
+## Project notes
 
-**Repository:** https://github.com/charithreddy9/EvidenceDesk-AI. The earlier portfolio-workspace copy remains available for reference.
+- [Architecture and engineering decisions](https://github.com/charithreddy9/EvidenceDesk-AI/blob/staging-fastembed/ARCHITECTURE.md)
+- [How the evaluation works](https://github.com/charithreddy9/EvidenceDesk-AI/blob/staging-fastembed/EVALUATION.md)
+- [Three-minute demo walkthrough](https://github.com/charithreddy9/EvidenceDesk-AI/blob/staging-fastembed/DEMO.md)
+- [Staging deployment and memory limits](https://github.com/charithreddy9/EvidenceDesk-AI/blob/staging-fastembed/STAGING.md)
+- [Standard deployment instructions](DEPLOY.md)
+
+**Repository landing page:** This README describes the latest *staging* implementation, not the production code on `main`. Follow the staging branch links above for its source code.
+
+**About the two deployed versions:** the public production URL is built from `main` and uses TF-IDF by default. The hybrid BGE version, evaluation dashboard, and documentation here are maintained on `staging-fastembed`. The staging service is deployed manually; GitHub may be ahead of the live demo. Paid AI calls and anonymous uploads are disabled on staging.
