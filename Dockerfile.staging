@@ -27,7 +27,8 @@ COPY backend/ /app/backend/
 # Evaluate the real BGE model once during the image build, never per visitor.
 # Keep the report file in the image so the evaluation UI is read-only.
 RUN mkdir -p /app/reports \
-    && RETRIEVAL_BACKEND=fastembed python -m backend.evaluate --report /app/reports/evaluation.json
+    && RETRIEVAL_BACKEND=fastembed python -m backend.evaluate --report /app/reports/evaluation.json \
+    && python -m backend.quality_gate /app/reports/evaluation.json
 COPY --from=ui /ui/dist/ /app/public/
 # Prefetch the real local model during image build, not during a cold start.
 RUN mkdir -p /app/model-cache \
