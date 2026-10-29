@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from pypdf import PdfReader
 
 from .llm import generate_grounded_answer
+from .evidence import select_evidence, cited_source_sentence
 from .retrieval import DEMO_DOCUMENTS, EvidenceIndex, chunks
 from .storage import DocumentStore
 
@@ -131,7 +132,7 @@ def create_app(documents=None, db_path=None, provider=None, encoder=None) -> Fas
     @app.post("/api/ask")
     def ask(body: AskRequest, _: bool = Depends(require_read)):
         with guard:
-            passages = index.search(body.question, body.top_k)
+            passages = select_evidence(index.search(body.question, body.top_k), selected)
         if not passages:
             return {"answer":"I couldn't find enough supporting evidence in the indexed documents.",
                     "citations":[],"abstained":True,"mode":"abstained","retriever":selected}
@@ -161,8 +162,12 @@ def create_app(documents=None, db_path=None, provider=None, encoder=None) -> Fas
         else:
             p = citations[0]
             suffix = f", page {p['page']}" if p.get("page") else ""
-            answer = f"Source excerpt from {p['title']}{suffix} {p['reference']}: {p['text']}"
-            mode = "extractive"
+            if selected == "fastembed":
+                answer = cited_source_sentence(p, p["reference"])
+                mode = "sentence_extract"
+            else:
+                answer = f"Source excerpt from {p['title']}{suffix} {p['reference']}: {p['text']}"
+                mode = "extractive"
         return {"answer":answer,"citations":citations,"abstained":False,"mode":mode,"retriever":selected}
     return app
 

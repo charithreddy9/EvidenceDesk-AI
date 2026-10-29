@@ -41,6 +41,13 @@ def main():
     assert code == 200, (code, answer)
     assert answer["retriever"] == "fastembed", answer
     assert answer["citations"] and answer["citations"][0]["doc_id"] == "policy-travel", answer
+    assert answer["mode"] == "sentence_extract", answer
+    assert "$65 per day" in answer["answer"], answer
+    assert len(answer["citations"]) == 1, answer
+    assert answer["citations"][0]["text"] == "The meal allowance is $65 per day.", answer
+    code, missing = call("/api/ask", {"question": "What is the weather in Tokyo?", "generate": False})
+    print("Out-of-domain question:", missing)
+    assert code == 200 and missing["abstained"] and not missing["citations"], missing
     print("BGE retrieval top match:", answer["citations"][0]["doc_id"], "score:", answer["citations"][0]["score"])
     code, _ = call("/api/ask", {"question": "What is the meal allowance?", "generate": True})
     assert code == 403, "Paid LLM must remain disabled in staging"

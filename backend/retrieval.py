@@ -31,6 +31,26 @@ def chunks(text: str, window: int = 90, overlap: int = 20) -> list[str]:
     return [" ".join(words[i:i + window]) for i in range(0, len(words), step)
             if words[i:i + window] and (i == 0 or len(words) - i > overlap)]
 
+def sentence_chunks(text: str) -> list[str]:
+    """Split source text into bounded, unmodified sentences for local BGE QA.
+
+    Sentence retrieval narrows citations to exactly the source span used
+    for an extractive answer. Long/no-punctuation text falls back to
+    word-bounded chunks to avoid excessive input.
+    """
+    pieces = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", text.strip())
+    results = []
+    for piece in pieces:
+        piece = piece.strip()
+        if not piece:
+            continue
+        if len(piece.split()) > 90:
+            results.extend(chunks(piece, window=90, overlap=15))
+        else:
+            results.append(piece)
+    return results
+
+
 class SentenceTransformerEncoder:
     """Lazy import keeps lexical installs lightweight."""
     def __init__(self, model_name: str | None = None):
@@ -96,7 +116,8 @@ class EvidenceIndex:
         for doc in self.documents:
             pages = doc.get("pages") or [doc["text"]]
             for page_number, page_text in enumerate(pages, start=1):
-                for chunk_index, part in enumerate(chunks(page_text)):
+                parts = sentence_chunks(page_text) if self.provider == "fastembed" else chunks(page_text)
+                for chunk_index, part in enumerate(parts):
                     self.passages.append({
                         "doc_id": doc["id"], "title": doc["title"], "chunk": chunk_index,
                         "page": page_number if doc.get("pages") else None, "text": part

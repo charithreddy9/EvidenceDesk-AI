@@ -37,3 +37,13 @@ If the 512 MB gate fails or Render kills staging, keep production unchanged and 
 - The 512 MB container test checks **one startup and one real retrieval**, not a full peak-memory, concurrency, cold-start, sustained load, or adversarial benchmark.
 - Render's free service may sleep after inactivity; persistent state is not guaranteed.
 - Staging is not yet a production-grade RAG system: retrieval is semantic, but paid LLM synthesis remains disabled, and citations are not independently checked for entailment.
+
+## Staging answer and citation upgrade (experimental)
+
+On branch `staging-fastembed`, the BGE retrieval index stores bounded **source sentences** as retrieval units. The API suppresses candidates scoring below 0.55 cosine similarity or over 0.14 below the top result. These provisional fixed thresholds are **not confidence probabilities** and may reject relevant answers or accept false matches on unfamiliar data. The UI now shows only kept citations, with scores.
+
+Instead of returning a full document passage, the read-only API gives the verbatim top-ranked sentence plus its source marker in `sentence_extract` mode. No LLM, paraphrasing, or paid API call is made. Questions that need multiple-sentence synthesis may be incompletely answered; the full document is not independently verified for factual entailment.
+
+The `python -m backend.evaluate` script reports illustrative hit@1, recall@3, MRR, and abstention on literal, paraphrased, and unanswerable questions. It is a **tiny synthetic smoke evaluation**, not a validated benchmark.
+
+Staging auto-deploy is **off**. After GitHub CI and the 512 MiB memory gate pass, use **Manual Deploy → Deploy latest commit** on `evidencedesk-ai-staging-bge`. Never sync or deploy the production Blueprint to test these changes.
