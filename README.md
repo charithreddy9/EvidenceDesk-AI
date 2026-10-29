@@ -1,129 +1,134 @@
-# EvidenceDesk-AI
-### Evidence-first document question answering · Full-stack AI engineering portfolio
+# EvidenceDesk AI
 
-[**Try the semantic staging demo**](https://evidencedesk-ai-staging-bge.onrender.com) · [**Evaluation dashboard**](https://evidencedesk-ai-staging-bge.onrender.com) · [**Production TF-IDF demo**](https://evidencedesk-ai.onrender.com)
+**A document-search app that shows its sources—and says when it doesn't know.**
 
-[![EvidenceDesk CI](https://github.com/charithreddy9/EvidenceDesk-AI/actions/workflows/ci.yml/badge.svg?branch=staging-fastembed)](https://github.com/charithreddy9/EvidenceDesk-AI/actions/workflows/ci.yml?query=branch%3Astaging-fastembed)
-[![FastEmbed Staging Memory Gate](https://github.com/charithreddy9/EvidenceDesk-AI/actions/workflows/staging-memory.yml/badge.svg?branch=staging-fastembed)](https://github.com/charithreddy9/EvidenceDesk-AI/actions/workflows/staging-memory.yml?query=branch%3Astaging-fastembed)
+[Try the semantic demo](https://evidencedesk-ai-staging-bge.onrender.com) · [See the evaluation dashboard](https://evidencedesk-ai-staging-bge.onrender.com) · [View the simpler TF-IDF version](https://evidencedesk-ai.onrender.com)
 
-**Built with:** React 19 · Vite · Python 3.11 · FastAPI · BAAI/bge-small-en-v1.5 · FastEmbed/ONNX · scikit-learn TF-IDF · SQLite · Docker · GitHub Actions · Render
+[![Application tests](https://github.com/charithreddy9/EvidenceDesk-AI/actions/workflows/ci.yml/badge.svg?branch=staging-fastembed)](https://github.com/charithreddy9/EvidenceDesk-AI/actions/workflows/ci.yml?query=branch%3Astaging-fastembed)
+[![Real-model and memory test](https://github.com/charithreddy9/EvidenceDesk-AI/actions/workflows/staging-memory.yml/badge.svg?branch=staging-fastembed)](https://github.com/charithreddy9/EvidenceDesk-AI/actions/workflows/staging-memory.yml?query=branch%3Astaging-fastembed)
 
-> **Deployment status:** The public production website runs from the separate `main` branch with its default lexical TF-IDF retrieval. The semantic/hybrid implementation and evaluation work live on `staging-fastembed` and use a separate Render service with manual deployment. GitHub code may be ahead of the staging URL. Do not confuse the two versions.
+*React · TypeScript-free JavaScript · Vite · FastAPI · Python · SQLite · BGE-small / FastEmbed · scikit-learn · Docker · GitHub Actions · Render*
 
-## What it does
+## Why I built it
 
-EvidenceDesk answers questions about sample policy documents using **a local semantic + lexical search pipeline**. It retrieves source sentences, applies a lightweight evidence verifier, and returns a short **verbatim cited answer**. If no candidate passes verification, it abstains instead of inventing an answer. A read-only evaluation dashboard makes both successes and failures inspectable.
+I wanted to explore a problem that comes up quickly with document-based AI: finding a passage that sounds related to a question is not the same as finding a passage that answers it.
 
-**Example question:** “How much can I spend per day on meals?”
+EvidenceDesk started with straightforward keyword search. That was a useful baseline, but it struggled when someone asked a question in different words from the document. I added local sentence embeddings to handle paraphrases, then ran into the opposite problem: semantic search occasionally returned convincing-looking passages that had nothing to do with the actual answer.
 
-**Source-grounded answer:** “The meal allowance is $65 per day. [1]” — from a *fictional* travel policy. No paid LLM is involved.
+The current staging version combines both approaches. It searches with BGE-small embeddings and TF-IDF, checks the candidate sentences for relevant evidence, and either returns the original sentence with a citation or says it couldn't find enough support. It **doesn't use a language model to write the answer**.
 
-### Product demonstration
-- **Ask workspace:** Search the four seeded fictional policies and inspect specific cited sentences, titles, and cosine similarity scores.
-- **Source-aware abstention:** Unsupported queries should return an explicit no-evidence response without citations.
-- **Evaluation lab:** View Hit@1, Recall@3, MRR, abstention accuracy, approximate warm latency, source-fragment matches, and before/after comparisons. Filter all test cases, including failures.
-- **Local-first embeddings:** BGE-small runs through ONNX on CPU, without uploading document contents to a hosted embedding provider.
-- **Staging guardrails:** 512 MiB container smoke gate; precomputed evaluation snapshots; publicly disabled document mutation and paid generation; production branch unchanged.
+All four documents in the public demo are fictional policies. They're intentionally small so it's easy to inspect the result and notice when the retrieval goes wrong.
 
-## System design
+## See it in action
+
+Try asking:
+
+> **Can plane tickets be booked outside the corporate tool?**
+
+The response quotes the travel policy:
+
+> All travel must be booked through the company travel portal. [1]
+
+The citation shows the policy title and exact sentence. You can also ask where live-system passwords should be stored. The answer points to the credentials rule in the security handbook.
+
+Then try something the documents don't cover:
+
+> **How many paid vacation days do employees get?**
+
+Rather than guess, the app returns:
+
+> I couldn't find enough supporting evidence in the indexed documents.
+
+That's the behavior I was most interested in getting right: a missing answer should look like a missing answer.
+
+**[Open the working semantic demo](https://evidencedesk-ai-staging-bge.onrender.com)**
+
+## How it works
 
 ```mermaid
 flowchart LR
-  U["React question UI"] --> API["FastAPI /api/ask"]
-  API --> IX["Sentence index"]
-  IX --> D["BGE-small ONNX vectors"]
-  IX --> S["Local TF-IDF"]
-  D --> F["Hybrid fusion"]
-  S --> F
-  F --> V["Source support + answer type verification"]
-  V -->|Supported| A["Verbatim answer + citation"]
-  V -->|Insufficient| X["Abstain"]
-  CI["GitHub Actions: real BGE + quality gate + RAM test"] --> REPORT["Static evaluation JSON"]
-  REPORT --> UI["React evaluation dashboard"]
+    Q["Question in React"] --> API["FastAPI"]
+    API --> BGE["BGE-small semantic search"]
+    API --> TF["Local TF-IDF search"]
+    BGE --> F["Combine candidate sentences"]
+    TF --> F
+    F --> V{"Enough evidence?"}
+    V -->|Yes| S["Original sentence + citation"]
+    V -->|No| A["Abstain"]
 ```
 
-See [**ARCHITECTURE.md**](ARCHITECTURE.md) for implementation details and trade-offs.
+The backend stores document records in SQLite and builds an in-memory sentence index. BGE-small runs locally through ONNX; TF-IDF provides a second signal for terms that matter. A lightweight verifier examines the top candidate sentences before the API returns anything to the user.
 
-## Evidence-driven testing
+I chose verbatim sentences over generated summaries so the app wouldn't need a paid API, and so people could verify the answer against the source. The trade-off is that a single sentence sometimes can't fully answer a complicated question.
 
-The staging image builds a **real-model evaluation report** on 30 manually labeled development questions (12 direct, 10 paraphrases, 8 unanswerable) and a 14-question *development holdout*. Each has expected source labels; answerable cases have verbatim answer fragments.
+The [architecture notes](ARCHITECTURE.md) explain the components, ranking trade-offs, and why the staging service is separate from production.
 
-The Docker build fails when the quality regression gate is not satisfied. Results are **not** a statistically representative benchmark, calibrated confidence, or independent proof of entailment. The 14 held-out questions were inspected during development and share the same fictional documents.
+## What testing changed
 
-| What is measured | Definition |
-| --- | --- |
-| Hit@1 / Recall@3 | Expected document present at rank one / within top three retained citations |
-| MRR | Mean reciprocal rank of the expected source |
-| Abstention accuracy | Unsupported questions correctly answered with no citations |
-| Verbatim support | Selected source sentence contains labeled source fragment, not a model-graded factual judgment |
-| Mean / P95 latency | Warm, single-process retrieval + filtering during image build; excludes browser/network/cold starts |
+I didn't get answer filtering right on the first try. An early semantic-only version found the meal allowance correctly but also surfaced unrelated policies. Tightening the filters improved abstention, but it rejected legitimate paraphrases, including questions about booking channels and credential storage.
 
-See [**EVALUATION.md**](EVALUATION.md) for reproducible commands, dataset caveats, and score interpretation. The dashboard is a build-time snapshot, not continuously gathered traffic telemetry.
+I added an evaluation page so those mistakes wouldn't be invisible. It shows the individual questions, the expected document, the retrieved sentence, and whether the case passed. Failures stay visible instead of being averaged away.
 
-## Run locally
+The most recent *verified development run* gave:
 
-### Fast semantic and hybrid mode
-Requires Python 3.11+, Node.js 22+, and a first-run download of the open model weights.
+| Check | Result |
+| --- | ---: |
+| Original development set | **30 / 30** cases passed |
+| Unsupported questions in that set | **8 / 8** correctly rejected |
+| Separate development question set | **13 / 14** cases passed |
+| Unsupported questions in the second set | **6 / 6** correctly rejected |
+
+Those numbers need context. The original set has 30 hand-written questions over four fictional documents. The other 14 questions use different wording but **the same documents**, and I inspected them while improving the verifier. This is a useful regression test, **not** an independent benchmark or a claim of 100% accuracy in the real world.
+
+The dashboard also reports Recall@3, mean reciprocal rank (MRR), and warm retrieval latency. Similarity values are embedding scores, not probabilities that an answer is correct.
+
+Read the [evaluation notes](EVALUATION.md) to reproduce the report and see precisely what each metric means.
+
+## Run it locally
+
+You need Python 3.11+, Node.js 22+, and internet access the first time the BGE model downloads.
 
 ```bash
 python -m venv .venv
-# macOS/Linux
 source .venv/bin/activate
-# Windows PowerShell: .venv\\Scripts\\Activate.ps1
 pip install -r backend/requirements-fastembed.txt
 RETRIEVAL_BACKEND=fastembed uvicorn backend.app:app --port 8000
 ```
 
-In another terminal:
+In a second terminal:
 
 ```bash
 cd frontend
 npm install
-# Set VITE_API_BASE_URL=http://localhost:8000 in frontend/.env.local
+# Put VITE_API_BASE_URL=http://localhost:8000 in frontend/.env.local
 npm run dev
 ```
 
-The production default is `tfidf` unless `RETRIEVAL_BACKEND=fastembed` is configured. The staging Docker setup builds the frontend and API into one service.
+On Windows, activate the virtual environment with `.venv\Scripts\Activate.ps1` in PowerShell and set the backend environment variable using `$env:RETRIEVAL_BACKEND="fastembed"`.
 
-### Run evaluation and tests
+To run the checks and create a fresh evaluation report:
 
 ```bash
 pip install -r backend/requirements-dev.txt
 python -m pytest backend/tests -q
 RETRIEVAL_BACKEND=fastembed python -m backend.evaluate --report /tmp/evidencedesk-evaluation.json
 python -m backend.quality_gate /tmp/evidencedesk-evaluation.json
-cd frontend && npm run build
 ```
 
-Staging CI additionally builds `Dockerfile.staging`, runs the real local BGE model, tests the API with a **512 MiB memory cap**, and blocks image builds when its labeled-data quality requirements are missed. It does not benchmark sustained concurrency.
+CI also builds a staging Docker image, runs the actual BGE model, and checks that the service starts within a **512 MiB memory limit**. This only checks a small workload, not concurrency or production-scale load.
 
-## Key endpoints
+## What I would improve next
 
-| Endpoint | Behavior |
-| --- | --- |
-| `GET /api/health` | Health, retriever and indexed document count |
-| `GET /api/config` | Enabled capabilities |
-| `GET /api/documents` | Source library |
-| `POST /api/ask` | Ranked evidence and source-cited extracted sentence or abstention |
-| `GET /api/evaluation` | Read-only, Docker-build-time evaluation snapshot in staging |
-| `POST /api/upload` | PDF/TXT/MD ingestion; **disabled for anonymous public staging** |
+I'd test against a genuinely unseen collection of documents with someone else labeling the answers. I also want to check multi-sentence questions, improve the evidence verifier beyond word overlap, and test memory and latency under concurrent requests. Before using real organizational documents, the app would need stronger authentication, audit logging, persistent storage, and safer ingestion.
 
-## Video and screenshots
+This is a working **portfolio prototype**, not a secure multi-tenant document platform. Don't upload confidential or regulated information to the public demo.
 
-Follow [**DEMO.md**](DEMO.md) for a three-minute walkthrough and a screenshot capture checklist. Screenshots and recordings are intentionally not represented as captured until verified from the live deployment.
+## Project notes
 
-## Security, limitations and roadmap
+- [Architecture and engineering decisions](ARCHITECTURE.md)
+- [How the evaluation works](EVALUATION.md)
+- [Three-minute demo walkthrough](DEMO.md)
+- [Staging deployment and memory limits](STAGING.md)
+- [Standard deployment instructions](DEPLOY.md)
 
-**Public staging:** `ENABLE_PAID_LLM=false`, `ENABLE_PAID_EMBEDDINGS=false`, `ALLOW_PUBLIC_UPLOAD=false`. No OpenAI key or anonymous writes are needed. Staging auto-deploy remains **off**.
-
-- All four policies are **fictional**. Never upload regulated, proprietary, or confidential data to the demo.
-- This is source **extraction**, not generative LLM synthesis. Lexical support is heuristic; no formal entailment, claim verification, or calibrated confidence.
-- Memory measurements show a single small instance, not a stress-tested SLA. Render free tier may cold-start.
-- PDFs require text extraction; OCR, malware scanning, per-user RBAC, multi-tenant isolation, persistent vector storage, and production audit logging are not provided.
-- The manually authored evaluation is not representative of external documents. The next milestone is a truly unseen labeled document suite and human-reviewed answer faithfulness.
-
-**Engineering documentation:** [Architecture](ARCHITECTURE.md) · [Evaluation](EVALUATION.md) · [Staging deployment](STAGING.md) · [Demo walkthrough](DEMO.md) · [Standard deployment](DEPLOY.md).
-
----
-
-Built as an educational engineering portfolio project demonstrating **retrieval systems, grounded answers, offline model inference, full-stack APIs, continuous evaluation, containerization, and safe deployment isolation**.
+**About the two deployed versions:** the public production URL is built from `main` and uses TF-IDF by default. The hybrid BGE version, evaluation dashboard, and documentation here are maintained on `staging-fastembed`. The staging service is deployed manually; GitHub may be ahead of the live demo. Paid AI calls and anonymous uploads are disabled on staging.
