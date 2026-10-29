@@ -11,7 +11,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build BGE-staging image with offline model preload
         run: docker build -f Dockerfile.staging -t evidencedesk-bge-staging:ci .
-      - name: Diagnose unresolved paraphrases with real BGE\n        run: docker run --rm --memory=512m --memory-swap=512m evidencedesk-bge-staging:ci python -m backend.diagnose_paraphrases\n      - name: Start container with 512 MiB RAM cap
+      - name: Diagnose unresolved paraphrases with real BGE
+        run: docker run --rm --memory=512m --memory-swap=512m evidencedesk-bge-staging:ci python -m backend.diagnose_paraphrases
+      - name: Start container with 512 MiB RAM cap
         run: |
           docker run -d --name evidence-bge-512 \
             --memory=512m --memory-swap=512m --cpus=0.5 \
