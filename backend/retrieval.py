@@ -13,6 +13,7 @@ from uuid import uuid4
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from .evidence import terms
 
 DEMO_DOCUMENTS = [
     {"id": "policy-travel", "title": "Sample Travel & Expenses Policy", "text": "Approved business travel expenses are reimbursable. Employees must submit an itemized receipt within 30 days of purchase. The meal allowance is $65 per day. Airfare costing more than $800 requires manager preapproval. All travel must be booked through the company travel portal. This is a fictional demonstration policy."},
@@ -124,6 +125,8 @@ class EvidenceIndex:
                     })
         self.matrix = None
         self.vectorizer = None
+        self.lexical_vectorizer = None
+        self.lexical_matrix = None
         if not self.passages:
             return
         texts = [p["text"] for p in self.passages]
@@ -132,6 +135,9 @@ class EvidenceIndex:
             self.matrix = self.vectorizer.fit_transform(texts)
         else:
             self.matrix = self._normalized(self.encoder.encode(texts))
+            if self.provider == 'fastembed':
+                self.lexical_vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True)
+                self.lexical_matrix = self.lexical_vectorizer.fit_transform([' '.join(terms(p['title'] + ' ' + p['text'])) for p in self.passages])
 
     @staticmethod
     def _normalized(array):
@@ -166,3 +172,17 @@ class EvidenceIndex:
         order = sorted(range(len(scores)), key=lambda i: (-float(scores[i]), self.passages[i]["doc_id"], self.passages[i]["chunk"]))
         return [{**self.passages[i], "score": round(float(scores[i]), 4)}
                 for i in order if float(scores[i]) >= minimum_score][:top_k]
+
+    def search_hybrid(self, question: str, top_k: int = 12):
+        """Combine local BGE cosine with normalized local TF-IDF; no extra model."""
+        if self.provider != "fastembed":
+            return self.search(question, top_k=top_k)
+        if self.matrix is None:
+            return []
+        query = self._normalized(getattr(self.encoder, "encode_query", self.encoder.encode)([question]))
+        dense = (query @ self.matrix.T).ravel()
+        q = " ".join(terms(question))
+        sparse = cosine_similarity(self.lexical_vectorizer.transform([q]), self.lexical_matrix).ravel() if q else np.zeros(len(self.passages))
+        indices = [i for i in range(len(dense)) if dense[i] >= .40 or sparse[i] >= .08]
+        indices.sort(key=lambda i: (-.73*float(dense[i])-.27*float(sparse[i]), -float(dense[i]), self.passages[i]["doc_id"], self.passages[i]["chunk"]))
+        return [{**self.passages[i], "score":round(float(dense[i]),4), "lexical_score":round(float(sparse[i]),4)} for i in indices[:top_k]]
