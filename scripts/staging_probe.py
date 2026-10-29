@@ -43,6 +43,8 @@ def main():
                ["hit_at_1", "recall_at_3", "mrr", "abstention_accuracy"])
     assert report["summary"]["latency_ms"]["p95"] > 0
     assert "baseline_summary" in report and "comparison" in report
+    assert report["holdout"]["verified_summary"]["cases"] >= 12
+    print("Held-out comparison:", report["holdout"]["baseline_summary"], report["holdout"]["verified_summary"])
     print("Static evaluation report:", report["summary"])
     print("Before/after:", report["baseline_summary"], report["comparison"])
     code, config = call("/api/config")
