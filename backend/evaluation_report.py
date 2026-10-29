@@ -13,7 +13,7 @@ from pathlib import Path
 from statistics import mean
 from time import perf_counter
 
-from .evidence import MIN_BGE_SIMILARITY, MAX_BGE_GAP, select_evidence, cited_source_sentence
+from .evidence import MIN_BGE_SIMILARITY, MAX_BGE_GAP, select_evidence, baseline_evidence, cited_source_sentence
 
 DATASET_VERSION = "2026-10-28-v1"
 
@@ -92,7 +92,7 @@ def summarize(rows: list[dict]) -> dict:
     }
 
 
-def build_report(index, cases=None, *, generated_at=None) -> dict:
+def build_report(index, cases=None, *, generated_at=None, verifier=True) -> dict:
     examples = LABELED_CASES if cases is None else cases
     ids = [item["id"] for item in examples]
     if len(ids) != len(set(ids)):
@@ -100,7 +100,9 @@ def build_report(index, cases=None, *, generated_at=None) -> dict:
     rows = []
     for case in examples:
         start = perf_counter()
-        hits = select_evidence(index.search(case["question"], top_k=3), index.provider)
+        raw_hits = index.search(case["question"], top_k=12 if verifier and index.provider == "fastembed" else 3)
+        hits = (select_evidence(raw_hits, index.provider, case["question"], 3)
+                if verifier else baseline_evidence(raw_hits, index.provider))
         elapsed_ms = (perf_counter() - start) * 1000
         predicted = hits[0] if hits else None
         expected = case["expected_document"]
@@ -132,6 +134,7 @@ def build_report(index, cases=None, *, generated_at=None) -> dict:
     now = generated_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
     return {
         "schema_version": 1,
+        "verification_enabled": verifier,
         "generated_at_utc": now,
         "dataset": {
             "name": "EvidenceDesk fictional policy QA regression set",

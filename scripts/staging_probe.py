@@ -42,7 +42,9 @@ def main():
     assert all(0 <= report["summary"][k] <= 1 for k in
                ["hit_at_1", "recall_at_3", "mrr", "abstention_accuracy"])
     assert report["summary"]["latency_ms"]["p95"] > 0
+    assert "baseline_summary" in report and "comparison" in report
     print("Static evaluation report:", report["summary"])
+    print("Before/after:", report["baseline_summary"], report["comparison"])
     code, config = call("/api/config")
     assert code == 200 and config["semantic_enabled"] is True
     assert config["llm_available"] is False and config["uploads_enabled"] is False

@@ -72,7 +72,7 @@ def test_report_is_grounded_in_actual_index_results(tmp_path):
         {"id": "d", "category": "unanswerable", "question": "unknown question?",
          "expected_document": None, "expected_fragment": None},
     ]
-    r = build_report(FakeIndex(), labels, generated_at="2026-10-28T22:00:00+00:00")
+    r = build_report(FakeIndex(), labels, verifier=False, generated_at="2026-10-28T22:00:00+00:00")
     assert r["schema_version"] == 1
     assert r["generated_at_utc"] == "2026-10-28T22:00:00+00:00"
     assert r["summary"]["cases"] == 4

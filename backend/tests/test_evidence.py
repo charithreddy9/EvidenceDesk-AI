@@ -2,7 +2,7 @@ import numpy as np
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
-from backend.evidence import select_evidence, cited_source_sentence
+from backend.evidence import select_evidence, cited_source_sentence, support_score
 from backend.retrieval import sentence_chunks, DEMO_DOCUMENTS
 from backend.evaluate import measure, PARAPHRASE_CASES
 
@@ -81,3 +81,13 @@ def test_evaluation_counts_and_mrr():
     assert scores["mrr"] == 0.5
     assert scores["abstention_accuracy"] == 1.0
     assert len(PARAPHRASE_CASES) >= 5
+
+def test_verifier_rejects_unrelated_benefits_without_keyword_hacks():
+    passages=[
+        {"doc_id":"d1","title":"Travel Policy","text":"Travel expenses are reimbursable.","score":.78,"chunk":0},
+        {"doc_id":"d2","title":"Travel Policy","text":"The meal allowance is $65 per day.","score":.75,"chunk":1},
+    ]
+    assert select_evidence(passages,"fastembed","Does the company reimburse gym memberships?")==[]
+    assert select_evidence(passages,"fastembed","What is the meal allowance?")[0]["text"].startswith("The meal")
+    assert not select_evidence(passages,"fastembed","How many vacation days are paid?")
+    assert support_score("Where must production credentials be stored?",{"text":"Production credentials must be stored in a secrets manager.","title":"Security Handbook"})[0] > .67

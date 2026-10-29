@@ -132,7 +132,7 @@ def create_app(documents=None, db_path=None, provider=None, encoder=None) -> Fas
     @app.post("/api/ask")
     def ask(body: AskRequest, _: bool = Depends(require_read)):
         with guard:
-            passages = select_evidence(index.search(body.question, body.top_k), selected)
+            passages = select_evidence(index.search(body.question, max(body.top_k, 12) if selected == 'fastembed' else body.top_k), selected, body.question if selected == 'fastembed' else None, body.top_k)
         if not passages:
             return {"answer":"I couldn't find enough supporting evidence in the indexed documents.",
                     "citations":[],"abstained":True,"mode":"abstained","retriever":selected}

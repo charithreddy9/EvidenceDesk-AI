@@ -58,6 +58,9 @@ def main():
     index = EvidenceIndex(provider=provider)
     if args.report:
         report = build_report(index)
+        baseline = build_report(index, verifier=False)
+        report['baseline_summary'] = baseline['summary']
+        report['comparison'] = {metric: round(report['summary'][metric]-baseline['summary'][metric],4) for metric in ['hit_at_1','recall_at_3','mrr','abstention_accuracy','case_pass_rate']}
         write_report(report, args.report)
         print(json.dumps({"model": report["model"], "summary": report["summary"]}, indent=2))
         print(f"Built static evaluation report at {args.report}; no paid APIs used.")
