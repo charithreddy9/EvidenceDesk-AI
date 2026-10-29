@@ -1,5 +1,8 @@
 """Small, manually authored QA evaluation: smoke/regression only, not a benchmark."""
+import argparse
 import os
+import json
+from .evaluation_report import build_report, write_report
 from .retrieval import EvidenceIndex
 from .evidence import select_evidence
 
@@ -48,8 +51,17 @@ def measure(index, positives=CASES, negatives=UNANSWERABLE_CASES):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Evaluate local fictional-policy retrieval")
+    parser.add_argument("--report", help="Write actual labeled offline evaluation results as JSON")
+    args = parser.parse_args()
     provider = os.getenv("RETRIEVAL_BACKEND", "tfidf")
     index = EvidenceIndex(provider=provider)
+    if args.report:
+        report = build_report(index)
+        write_report(report, args.report)
+        print(json.dumps({"model": report["model"], "summary": report["summary"]}, indent=2))
+        print(f"Built static evaluation report at {args.report}; no paid APIs used.")
+        return
     for title, positives in [("literal queries", CASES), ("paraphrases", PARAPHRASE_CASES)]:
         scores = measure(index, positives=positives)
         print(f"{provider} {title}: hit@1={scores['hit_at_1']:.2f} "
