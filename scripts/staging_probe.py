@@ -34,6 +34,15 @@ def main():
     else:
         raise SystemExit("Staging container never became healthy within 180 seconds")
     assert health["documents"] == 4, health
+    code, report = call("/api/evaluation")
+    assert code == 200 and report["schema_version"] == 1, report
+    assert report["model"]["retriever"] == "fastembed"
+    assert report["summary"]["cases"] >= 25 and len(report["cases"]) == report["summary"]["cases"]
+    assert report["summary"]["answerable"] >= 20 and report["summary"]["unanswerable"] >= 8
+    assert all(0 <= report["summary"][k] <= 1 for k in
+               ["hit_at_1", "recall_at_3", "mrr", "abstention_accuracy"])
+    assert report["summary"]["latency_ms"]["p95"] > 0
+    print("Static evaluation report:", report["summary"])
     code, config = call("/api/config")
     assert code == 200 and config["semantic_enabled"] is True
     assert config["llm_available"] is False and config["uploads_enabled"] is False

@@ -1,0 +1,31 @@
+import React,{useEffect,useMemo,useState} from 'react';
+import './evaluation.css';
+const PCT=v=>typeof v==='number'?(v*100).toFixed(1)+'%':'—';
+const TIME=v=>typeof v==='number'?v.toFixed(1)+' ms':'—';
+const pretty={direct:'Direct questions',paraphrase:'Paraphrased questions',unanswerable:'Unanswerable questions'};
+function Metric({label,value,detail}){return <article className="eval-metric"><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>}
+export default function EvaluationDashboard(){
+  const [report,setReport]=useState(null),[error,setError]=useState(''),[filter,setFilter]=useState('all'),[outcome,setOutcome]=useState('all');
+  useEffect(()=>{const controller=new AbortController();fetch('/api/evaluation',{signal:controller.signal,cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('Evaluation report is unavailable ('+r.status+'). Run the staging evaluation build.');return r.json()}).then(d=>{if(d.schema_version!==1||!Array.isArray(d.cases)||!d.summary)throw Error('Evaluation report format is unsupported.');setReport(d)}).catch(e=>{if(e.name!=='AbortError')setError(e.message)});return()=>controller.abort()},[]);
+  const cases=useMemo(()=>report?.cases.filter(c=>(filter==='all'||c.category===filter)&&(outcome==='all'||(outcome==='pass'?c.passed:!c.passed)))||[],[report,filter,outcome]);
+  if(error)return <div className="eval-shell"><h1>Evaluation <em>lab.</em></h1><div className="eval-empty" role="alert">{error}</div></div>;
+  if(!report)return <div className="eval-shell"><h1>Evaluation <em>lab.</em></h1><div className="eval-empty" role="status">Loading recorded evaluation results…</div></div>;
+  const s=report.summary;
+  return <div className="eval-shell">
+    <div className="eval-eyebrow">MODEL QUALITY · RECORDED RUN</div>
+    <div className="eval-heading"><div><h1>Evaluation <em>lab.</em></h1><p>Measured retrieval quality across labeled fictional policies. Explore every success, miss, and false-positive answer.</p></div><span className="eval-tag">BGE-small · Local ONNX</span></div>
+    <div className="eval-metrics">
+      <Metric label="Recall@3" value={PCT(s.recall_at_3)} detail={s.answerable+' answerable questions'}/>
+      <Metric label="MRR" value={PCT(s.mrr)} detail="Mean reciprocal rank"/>
+      <Metric label="Abstention accuracy" value={PCT(s.abstention_accuracy)} detail={s.unanswerable+' unanswerable questions'}/>
+      <Metric label="P95 retrieval latency" value={TIME(s.latency_ms.p95)} detail="Warm, single process"/>
+    </div>
+    <div className="eval-info"><div><strong>{s.cases} labeled questions</strong><span>Direct · Paraphrase · Unanswerable</span></div><div><strong>{PCT(s.answer_exact_support_rate)} source-fragment support</strong><span>Verbatim fragment check, not entailment</span></div><div><strong>{TIME(s.latency_ms.mean)} mean latency</strong><span>Median {TIME(s.latency_ms.p50)}</span></div></div>
+    <section className="eval-panel"><div className="eval-panel-header"><h2>Performance by question type</h2><span>Hit@1 / successful abstention</span></div><div className="eval-bars">{report.groups.map(g=><div className="eval-bar-row" key={g.category}><div><span>{pretty[g.category]||g.category}</span><small>{g.cases} cases</small></div><div className="eval-track"><div style={{width:PCT(g.category==='unanswerable'?g.abstention_accuracy:g.hit_at_1)}}/></div><strong>{PCT(g.category==='unanswerable'?g.abstention_accuracy:g.hit_at_1)}</strong></div>)}</div></section>
+    <section className="eval-panel"><div className="eval-panel-header"><h2>Case explorer</h2><span>{cases.length} of {report.cases.length} cases</span></div><div className="eval-filters"><label>Question type<select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All categories</option><option value="direct">Direct</option><option value="paraphrase">Paraphrase</option><option value="unanswerable">Unanswerable</option></select></label><label>Outcome<select value={outcome} onChange={e=>setOutcome(e.target.value)}><option value="all">All results</option><option value="pass">Passed</option><option value="fail">Failed</option></select></label></div>
+      <div className="eval-cases">{cases.map(c=><details key={c.id} className="eval-case"><summary><span className={'eval-dot '+(c.passed?'ok':'bad')}>{c.passed?'✓':'!'}</span><span className="eval-case-question">{c.question}<small>{pretty[c.category]} · {c.id}</small></span><span className="eval-case-time">{TIME(c.latency_ms)}</span></summary><div className="eval-detail"><div><b>Expected document:</b> {c.expected_document||'None (should abstain)'}</div><div><b>Returned document:</b> {c.predicted_title||'None'}</div><div><b>Result:</b> {c.abstained?'Abstained':c.answer||'No answer'}</div>{c.expected_fragment&&<div><b>Expected answer text:</b> {c.expected_fragment}</div>}<div><b>Rank / support:</b> {c.reciprocal_rank?('RR '+c.reciprocal_rank):'No relevant document retained'} · {c.answer_supported?'Exact source fragment found':'Not verified'}</div></div></details>)}</div>
+      {cases.length===0&&<div className="eval-empty">No test cases match these filters.</div>}
+    </section>
+    <div className="eval-foot"><strong>Methodology & limitations</strong><div>Dataset {report.dataset.version} · {report.model.retriever} · Created {new Date(report.generated_at_utc).toLocaleString()}</div>{report.limitations.map((t,i)=><p key={i}>• {t}</p>)}<a href="https://github.com/charithreddy9/EvidenceDesk-AI/blob/staging-fastembed/backend/evaluation_report.py" target="_blank" rel="noopener noreferrer">Inspect evaluation source ↗</a></div>
+  </div>
+}

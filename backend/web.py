@@ -19,6 +19,15 @@ def create_web_app(public_dir: str | Path | None = None, api: FastAPI | None = N
     application = api if api is not None else create_app()
     root = Path(public_dir or os.getenv("FRONTEND_DIST_DIR", "/app/public")).resolve()
 
+    @application.get("/api/evaluation", include_in_schema=False)
+    def evaluation_report():
+        # Built from labeled fixtures and actual model inference at Docker
+        # build time; never let public requests execute model evaluations.
+        report = Path(os.getenv("EVALUATION_REPORT_PATH", "/app/reports/evaluation.json"))
+        if not report.is_file():
+            raise HTTPException(status_code=503, detail="Evaluation report is not built")
+        return FileResponse(report, media_type="application/json", headers={"Cache-Control": "public, max-age=300"})
+
     if root.is_dir() and (root / "index.html").is_file():
         assets = root / "assets"
         if assets.is_dir():
