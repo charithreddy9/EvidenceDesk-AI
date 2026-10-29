@@ -59,6 +59,8 @@ ALIASES = {
  "reimbursed":"reimburse", "reimbursable":"reimburse",
  "reimbursement":"reimburse", "reimburse":"reimburse",
  "memberships":"membership", "vesting":"vest", "vests":"vest",
+ "holds":"store", "holding":"store", "hold":"store", "vault":"secret",
+ "deadline":"duration", "writeup":"report", "write-up":"report",
 }
 # Extra generic words: unmatched procedural words should not veto real evidence.
 COMMON = set("""
@@ -139,21 +141,23 @@ def select_evidence(passages: list[dict], retriever: str,
         return baseline_evidence(passages,retriever)[:limit] if limit else baseline_evidence(passages,retriever)
     candidates=[]
     for p in passages:
-        similarity=float(p["score"])
-        if similarity < MIN_BGE_SIMILARITY:
+        cosine=float(p["score"])
+        sparse=float(p.get("lexical_score",0))
+        coverage, detail=support_score(question,p)
+        matched=set(detail["matched"])
+        topical=matched-{"day","pay","reimburse","report","cost","allowance","duration","store"}
+        if len(matched)<2 or not topical or not detail.get("text_matched"):
             continue
-        agreement,detail=support_score(question,p)
-        count=len(detail["matched"])
-        if agreement < 0.67 or not count:
+        if cosine<0.55 and not (cosine>=0.49 and sparse>=0.2 and coverage>=0.5):
             continue
-        if not verifies_answer_type(question,p.get("text","")):
+        if not (coverage>=0.4 or (coverage>=0.27 and cosine>=0.61) or (coverage>=0.3 and sparse>=0.15)):
             continue
-        # Rank answerable source spans above semantically close but off-topic text.
-        rerank=0.65*agreement+0.35*similarity
-        candidates.append((rerank,p))
-    candidates.sort(key=lambda pair:(-pair[0],-float(pair[1]["score"]),pair[1]["doc_id"],pair[1]["chunk"]))
+        if not verifies_answer_type(question,p["text"]):
+            continue
+        blended=.52*cosine+.32*coverage+.16*sparse
+        candidates.append((blended,p))
+    candidates.sort(key=lambda x:(-x[0],-float(x[1]["score"]),x[1]["doc_id"],x[1]["chunk"]))
     return [p for _,p in candidates[:limit]] if limit else [p for _,p in candidates]
-
 
 def cited_source_sentence(passage: dict, reference: str) -> str:
     """Verbatim citation of source sentence; no generated claims."""
