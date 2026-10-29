@@ -91,3 +91,35 @@ def test_verifier_rejects_unrelated_benefits_without_keyword_hacks():
     assert select_evidence(passages,"fastembed","What is the meal allowance?")[0]["text"].startswith("The meal")
     assert not select_evidence(passages,"fastembed","How many vacation days are paid?")
     assert support_score("Where must production credentials be stored?",{"text":"Production credentials must be stored in a secrets manager.","title":"Security Handbook"})[0] > .67
+
+def test_p04_booking_channel_paraphrase_has_source_only():
+    from backend.evidence import select_evidence
+    question="Can plane tickets be booked outside the corporate tool?"
+    relevant={"doc_id":"policy-travel","chunk":4,"title":"Sample Travel & Expenses Policy",
+        "text":"All travel must be booked through the company travel portal.",
+        "score":.6349,"lexical_score":.209}
+    irrelevant={"doc_id":"policy-travel","chunk":3,"title":"Sample Travel & Expenses Policy",
+        "text":"Airfare costing more than $800 requires manager preapproval.",
+        "score":.5517,"lexical_score":.16}
+    result=select_evidence([relevant,irrelevant],"fastembed",question,3)
+    assert result and result[0]["text"] == relevant["text"]
+    assert not select_evidence([irrelevant],"fastembed",question)
+
+
+def test_p05_credential_storage_paraphrase_and_negative_controls():
+    from backend.evidence import select_evidence
+    passage={"doc_id":"policy-security","chunk":0,"title":"Sample Security Handbook",
+        "text":"Production credentials must be stored in an approved secrets manager and must never be committed to source control.",
+        "score":.4876,"lexical_score":.4306}
+    question="Where should live system passwords be saved?"
+    assert select_evidence([passage],"fastembed",question,3)==[passage]
+    for unrelated in ["Where are staff laptops stored?", "Where are parking passes saved?",
+                      "What is the password reset frequency?"]:
+        assert not select_evidence([passage],"fastembed",unrelated,3)
+
+
+def test_p04_p05_regressions_are_in_original_eval_suite():
+    from backend.evaluation_report import LABELED_CASES
+    cases={x["id"]:x for x in LABELED_CASES}
+    assert cases["p04"]["expected_fragment"]=="company travel portal"
+    assert cases["p05"]["expected_fragment"]=="secrets manager"
