@@ -100,7 +100,7 @@ def build_report(index, cases=None, *, generated_at=None, verifier=True) -> dict
     rows = []
     for case in examples:
         start = perf_counter()
-        raw_hits = index.search(case["question"], top_k=12 if verifier and index.provider == "fastembed" else 3)
+        raw_hits = (index.search_hybrid(case["question"], top_k=12) if verifier and index.provider == "fastembed" and hasattr(index, "search_hybrid") else index.search(case["question"], top_k=12 if verifier and index.provider == "fastembed" else 3))
         hits = (select_evidence(raw_hits, index.provider, case["question"], 3)
                 if verifier else baseline_evidence(raw_hits, index.provider))
         elapsed_ms = (perf_counter() - start) * 1000
